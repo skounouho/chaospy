@@ -1,7 +1,9 @@
 """Discretized Stieltjes' method."""
 import numpy
 import numpoly
+import scipy.integrate
 import chaospy
+import scipy
 
 
 def stieltjes(
@@ -120,6 +122,41 @@ def discretized_stieltjes(
         orths = numpoly.polynomial(orths).reshape(len(dist), order + 1)
         norms = numpy.asarray(norms, dtype=float).reshape(len(dist), order + 1)
         return coeffs, orths, norms
+    
+    if isinstance(dist, chaospy.Beta) or \
+        (isinstance(dist, chaospy.Trunc) and isinstance(dist._dist, chaospy.Beta)):
+        if isinstance(dist, chaospy.Trunc):
+            parameters = dist._dist.get_parameters(None, {}, assert_numerical=False)
+        else:
+            parameters = dist.get_parameters(None, {}, assert_numerical=False)
+        _alpha = parameters['parameters']['a'][0]
+        _beta = parameters['parameters']['b'][0]
+
+        if _alpha < 1 or _beta < 1:
+            var = numpoly.variable()
+            orths = [numpoly.polynomial(0.0), numpoly.polynomial(1.0)] + [None] * order
+
+            orthsf = numpy.zeros((order + 2, order + 2))
+            orthsf[1][0] = 1
+            norms = numpy.ones(order + 2)
+            coeffs = numpy.ones((2, order + 1))
+
+            inner = scipy.integrate.quad(lambda x: x, dist.lower, dist.upper, 
+                                        weight='alg', wvar=(_alpha - 1, _beta - 1))[0] / scipy.special.beta(_alpha, _beta)
+            for idx in range(order):
+                coeffs[0, idx] = inner / norms[idx + 1]
+                coeffs[1, idx] = norms[idx + 1] / norms[idx]
+                orthsf[idx + 2] = numpy.roll(orthsf[idx + 1], 1) - coeffs[0, idx] * orthsf[idx + 1] - orthsf[idx] * coeffs[1, idx]
+                orths[idx + 2] = (var - coeffs[0, idx]) * orths[idx + 1] - orths[idx] * coeffs[1, idx]
+                norms[idx + 2] = scipy.integrate.quad(lambda x: numpy.polynomial.polynomial.polyval(x, orthsf[idx + 2]) ** 2, dist.lower, dist.upper, 
+                                                    weight='alg', wvar=(_alpha - 1, _beta - 1))[0] / scipy.special.beta(_alpha, _beta)
+                inner = scipy.integrate.quad(lambda x: x * numpy.polynomial.polynomial.polyval(x, orthsf[idx + 2]) ** 2, dist.lower, dist.upper, 
+                                            weight='alg', wvar=(_alpha - 1, _beta - 1))[0] / scipy.special.beta(_alpha, _beta)
+            coeffs[:, order] = (inner / norms[-1], norms[-1] / norms[-2])
+            coeffs = coeffs.reshape(2, 1, order + 1)
+            orths = numpoly.polynomial(orths[1:]).reshape(1, order + 1)
+            norms = numpy.array(norms[1:]).reshape(1, order + 1)
+            return coeffs, orths, norms
 
     if rule is None:
         rule = "discrete" if dist.interpret_as_integer else "clenshaw_curtis"
