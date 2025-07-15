@@ -134,6 +134,11 @@ def discretized_stieltjes(
         _beta = parameters['parameters']['b'][0]
 
         if _alpha < 1 or _beta < 1:
+            assert len(dist.upper) == 1
+            assert len(dist.lower) == 1
+            u = dist.upper[0]
+            l = dist.lower[0]
+
             var = numpoly.variable()
             orths = [numpoly.polynomial(0.0), numpoly.polynomial(1.0)] + [None] * order
 
@@ -144,18 +149,18 @@ def discretized_stieltjes(
 
             # TODO simplify this expression using Gamma function
             scaling_constant = 1 / scipy.special.beta(_alpha, _beta) / \
-                (scipy.special.betainc(_alpha, _beta, dist.upper) - scipy.special.betainc(_alpha, _beta, dist.lower))[0]
+                (scipy.special.betainc(_alpha, _beta, u) - scipy.special.betainc(_alpha, _beta, l))
 
-            inner = scipy.integrate.quad(lambda x: x * (x >= dist.lower) * (x <= dist.upper), 0, 1, 
+            inner = scipy.integrate.quad(lambda x: x * (x >= l) * (x <= u), 0, 1, 
                                         weight='alg', wvar=(_alpha - 1, _beta - 1))[0] * scaling_constant
             for idx in range(order):
                 coeffs[0, idx] = inner / norms[idx + 1]
                 coeffs[1, idx] = norms[idx + 1] / norms[idx]
                 orthsf[idx + 2] = numpy.roll(orthsf[idx + 1], 1) - coeffs[0, idx] * orthsf[idx + 1] - orthsf[idx] * coeffs[1, idx]
                 orths[idx + 2] = (var - coeffs[0, idx]) * orths[idx + 1] - orths[idx] * coeffs[1, idx]
-                norms[idx + 2] = scipy.integrate.quad(lambda x: numpy.polynomial.polynomial.polyval(x, orthsf[idx + 2]) ** 2  * (x >= dist.lower) * (x <= dist.upper), 0, 1, 
+                norms[idx + 2] = scipy.integrate.quad(lambda x: numpy.polynomial.polynomial.polyval(x, orthsf[idx + 2]) ** 2  * (x >= l) * (x <= u), 0, 1, 
                                                     weight='alg', wvar=(_alpha - 1, _beta - 1))[0] * scaling_constant
-                inner = scipy.integrate.quad(lambda x: x * numpy.polynomial.polynomial.polyval(x, orthsf[idx + 2]) ** 2 * (x >= dist.lower) * (x <= dist.upper), 0, 1,
+                inner = scipy.integrate.quad(lambda x: x * numpy.polynomial.polynomial.polyval(x, orthsf[idx + 2]) ** 2 * (x >= l) * (x <= u), 0, 1,
                                             weight='alg', wvar=(_alpha - 1, _beta - 1))[0] * scaling_constant
             coeffs[:, order] = (inner / norms[-1], norms[-1] / norms[-2])
             coeffs = coeffs.reshape(2, 1, order + 1)
