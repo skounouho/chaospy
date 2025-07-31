@@ -125,14 +125,17 @@ def discretized_stieltjes(
         return coeffs, orths, norms
     
     if isinstance(dist, chaospy.Beta) or \
-        (isinstance(dist, chaospy.Trunc) and isinstance(dist._dist, chaospy.Beta)):
+        (isinstance(dist, chaospy.Trunc) and isinstance(dist._dist, chaospy.Beta)) or \
+            (isinstance(dist, chaospy.J) and (isinstance(dist[0], chaospy.Trunc)) and isinstance(dist[0]._dist, chaospy.Beta)):
         if isinstance(dist, chaospy.Trunc):
             parameters = dist._dist.get_parameters(None, {}, assert_numerical=False)
+        elif isinstance(dist, chaospy.J):
+            parameters = dist[0]._dist.get_parameters(None, {}, assert_numerical=False)
         else:
             parameters = dist.get_parameters(None, {}, assert_numerical=False)
         _alpha = parameters['parameters']['a'][0]
         _beta = parameters['parameters']['b'][0]
-
+        
         if _alpha < 1 or _beta < 1:
             assert len(dist.upper) == 1
             assert len(dist.lower) == 1
